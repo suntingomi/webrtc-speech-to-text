@@ -4,6 +4,8 @@ go 1.12
 
 require (
 	cloud.google.com/go v0.40.0
+	github.com/go-audio/audio v1.0.0 // indirect
+	github.com/go-audio/wav v1.1.0 // indirect
 	github.com/golang/mock v1.3.1 // indirect
 	github.com/google/btree v1.0.0 // indirect
 	github.com/google/pprof v0.0.0-20190515194954-54271f7e092f // indirect
