@@ -24,17 +24,18 @@ func main() {
 
 	httpPort := flag.String("http.port", httpDefaultPort, "HTTP listen port")
 	stunServer := flag.String("stun.server", defaultStunServer, "STUN server URL (stun:)")
-	speechCred := flag.String("google.cred", "", "Google Speech credentials file")
+	// speechCred := flag.String("google.cred", "", "Google Speech credentials file")
 	flag.Parse()
 
-	if *speechCred == "" {
-		log.Fatal("You need to specify the Google credentials file")
-	}
+	// if *speechCred == "" {
+	// 	log.Fatal("You need to specify the Google credentials file")
+	// }
 
 	var tr transcribe.Service
 	ctx := context.Background()
 	// tr, err := transcribe.NewGoogleSpeech(ctx, *speechCred)
-	tr, err := transcribe.NewWavService(ctx)
+	// tr, err := transcribe.NewWavService(ctx)
+	tr, err := transcribe.NewEchoService(ctx)
 
 	var webrtc rtc.Service
 	webrtc = rtc.NewPionRtcService(*stunServer, tr)

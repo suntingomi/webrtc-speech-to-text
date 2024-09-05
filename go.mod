@@ -12,6 +12,7 @@ require (
 	github.com/googleapis/gax-go/v2 v2.0.5 // indirect
 	github.com/gorilla/websocket v1.4.0
 	github.com/kr/pty v1.1.5 // indirect
+	github.com/pion/rtp v1.1.2 // indirect
 	github.com/pion/webrtc/v2 v2.0.15
 	github.com/satori/go.uuid v1.2.0
 	go.opencensus.io v0.22.0 // indirect

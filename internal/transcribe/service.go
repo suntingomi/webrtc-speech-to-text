@@ -2,6 +2,8 @@ package transcribe
 
 import (
 	"io"
+
+	"github.com/pion/webrtc/v2"
 )
 
 // Result is the struct used to serialize the results back to the client
@@ -13,7 +15,7 @@ type Result struct {
 
 // Service is an abstract representation of the transcription service
 type Service interface {
-	CreateStream() (Stream, error)
+	CreateStream(peerConnection *webrtc.PeerConnection) (Stream, error)
 }
 
 // Stream is an abstract representation of a transcription stream

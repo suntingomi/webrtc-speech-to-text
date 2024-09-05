@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-audio/audio"
 	"github.com/go-audio/wav"
+	"github.com/pion/webrtc/v2"
 )
 
 // WavTranscriber is an implementation of the Service interface for saving WAV files
@@ -18,7 +19,7 @@ type WavTranscriber struct {
 }
 
 // CreateStream creates a new WAV file and returns a Stream for writing audio data
-func (s *WavTranscriber) CreateStream() (Stream, error) {
+func (s *WavTranscriber) CreateStream(peerConnection *webrtc.PeerConnection) (Stream, error) {
 	timestamp := time.Now().Unix()
 	filename := fmt.Sprintf("%d.wav", timestamp)
 	filepath := filepath.Join(".", filename)

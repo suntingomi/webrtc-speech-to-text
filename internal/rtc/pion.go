@@ -59,12 +59,12 @@ func (p *PionPeerConnection) Close() error {
 	return p.pc.Close()
 }
 
-func (pi *PionRtcService) handleAudioTrack(track *webrtc.Track, dc *webrtc.DataChannel) error {
+func (pi *PionRtcService) handleAudioTrack(pc *webrtc.PeerConnection, track *webrtc.Track, dc *webrtc.DataChannel) error {
 	decoder, err := newDecoder()
 	if err != nil {
 		return err
 	}
-	trStream, err := pi.transcriber.CreateStream()
+	trStream, err := pi.transcriber.CreateStream(pc)
 	if err != nil {
 		return err
 	}
@@ -156,7 +156,7 @@ func (pi *PionRtcService) CreatePeerConnection() (PeerConnection, error) {
 	pc.OnTrack(func(track *webrtc.Track, r *webrtc.RTPReceiver) {
 		if track.Codec().Name == "opus" {
 			log.Printf("Received audio (%s) track, id = %s\n", track.Codec().Name, track.ID())
-			err := pi.handleAudioTrack(track, <-dataChan)
+			err := pi.handleAudioTrack(pc, track, <-dataChan)
 			if err != nil {
 				log.Printf("Error reading track (%s): %v\n", track.ID(), err)
 			}
