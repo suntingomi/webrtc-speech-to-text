@@ -3,7 +3,7 @@ package transcribe
 import (
 	"io"
 
-	"github.com/pion/webrtc/v2"
+	"github.com/pion/webrtc/v3"
 )
 
 // Result is the struct used to serialize the results back to the client

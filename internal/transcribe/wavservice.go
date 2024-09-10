@@ -10,7 +10,7 @@ import (
 
 	"github.com/go-audio/audio"
 	"github.com/go-audio/wav"
-	"github.com/pion/webrtc/v2"
+	"github.com/pion/webrtc/v3"
 )
 
 // WavTranscriber is an implementation of the Service interface for saving WAV files

@@ -7,7 +7,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/pion/webrtc/v2"
+	"github.com/pion/webrtc/v3"
 	"github.com/rviscarra/webrtc-speech-to-text/internal/transcribe"
 )
 
@@ -59,7 +59,7 @@ func (p *PionPeerConnection) Close() error {
 	return p.pc.Close()
 }
 
-func (pi *PionRtcService) handleAudioTrack(pc *webrtc.PeerConnection, track *webrtc.Track, dc *webrtc.DataChannel) error {
+func (pi *PionRtcService) handleAudioTrack(pc *webrtc.PeerConnection, track *webrtc.TrackRemote, dc *webrtc.DataChannel) error {
 	decoder, err := newDecoder()
 	if err != nil {
 		return err
@@ -94,7 +94,7 @@ func (pi *PionRtcService) handleAudioTrack(pc *webrtc.PeerConnection, track *web
 	timer := time.NewTimer(5 * time.Second)
 	go func() {
 		for {
-			packet, err := track.ReadRTP()
+			packet, _, err := track.ReadRTP()
 			timer.Reset(1 * time.Second)
 			if err != nil {
 				timer.Stop()
@@ -153,9 +153,9 @@ func (pi *PionRtcService) CreatePeerConnection() (PeerConnection, error) {
 		dataChan <- dc
 	})
 
-	pc.OnTrack(func(track *webrtc.Track, r *webrtc.RTPReceiver) {
-		if track.Codec().Name == "opus" {
-			log.Printf("Received audio (%s) track, id = %s\n", track.Codec().Name, track.ID())
+	pc.OnTrack(func(track *webrtc.TrackRemote, r *webrtc.RTPReceiver) {
+		if track.Codec().MimeType == webrtc.MimeTypeOpus {
+			log.Printf("Received audio (%s) track, id = %s\n", track.Codec().MimeType, track.ID())
 			err := pi.handleAudioTrack(pc, track, <-dataChan)
 			if err != nil {
 				log.Printf("Error reading track (%s): %v\n", track.ID(), err)
@@ -166,14 +166,6 @@ func (pi *PionRtcService) CreatePeerConnection() (PeerConnection, error) {
 	pc.OnICEConnectionStateChange(func(connState webrtc.ICEConnectionState) {
 		log.Printf("Connection state: %s \n", connState.String())
 	})
-
-	_, err = pc.AddTransceiver(webrtc.RTPCodecTypeAudio, webrtc.RtpTransceiverInit{
-		Direction: webrtc.RTPTransceiverDirectionRecvonly,
-	})
-	if err != nil {
-		log.Printf("Can't add transceiver: %s", err)
-		return nil, err
-	}
 
 	return &PionPeerConnection{
 		pc: pc,
