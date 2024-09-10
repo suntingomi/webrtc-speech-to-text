@@ -15,12 +15,15 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
+import org.webrtc.AudioTrack
 import org.webrtc.DataChannel
 import org.webrtc.IceCandidate
 import org.webrtc.MediaConstraints
 import org.webrtc.MediaStream
+import org.webrtc.MediaStreamTrack
 import org.webrtc.PeerConnection
 import org.webrtc.PeerConnectionFactory
+import org.webrtc.RtpReceiver
 import org.webrtc.SdpObserver
 import org.webrtc.SessionDescription
 import tech.magichacker.myrtcdemo.databinding.ActivityMainBinding
@@ -29,7 +32,8 @@ import java.util.Collections
 class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
 
-    private lateinit var peerConnection: PeerConnection
+    private var dataChannel: DataChannel? = null
+    private var peerConnection: PeerConnection? = null
     private val mediaConstraints = MediaConstraints().apply {
         mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio", "true"))
         mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveVideo", "false"))
@@ -49,12 +53,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.action.setOnClickListener {
-            binding.action.text = if (isConnected) "Stop" else "Start"
             if (isConnected) {
                 stop()
             } else {
                 start()
             }
+            isConnected = !isConnected
+            binding.action.text = if (isConnected) "Stop" else "Start"
         }
     }
 
@@ -75,16 +80,16 @@ class MainActivity : AppCompatActivity() {
                         return@launch
                     }
                     hasRemoteDesc = true
-                    val descriptor = peerConnection.localDescription
-                    val answer = sendOffer(offer = descriptor.description.orEmpty())
-                    log(">>>>>>>>>>>>>>>>>>>>>>>>>=====================================")
-                    log("after send answer: $answer")
-                    log(">>>>>>>>>>>>>>>>>>>>>>>>>=====================================")
+                    val descriptor = peerConnection?.localDescription
+                    val answer = sendOffer(offer = descriptor?.description.orEmpty())
+                    // log(">>>>>>>>>>>>>>>>>>>>>>>>>=====================================")
+                    // log("after send answer: $answer")
+                    // log(">>>>>>>>>>>>>>>>>>>>>>>>>=====================================")
                     val remoteDesc = SessionDescription(
                         SessionDescription.Type.ANSWER,
                         answer
                     )
-                    peerConnection.setRemoteDescription(object : SdpObserver {
+                    peerConnection?.setRemoteDescription(object : SdpObserver {
                         override fun onCreateSuccess(p0: SessionDescription?) {
                         }
 
@@ -106,6 +111,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             override fun onAddStream(mediaStream: MediaStream) {
+                log("onAddStream")
             }
 
             override fun onSignalingChange(signalingState: PeerConnection.SignalingState) {}
@@ -113,11 +119,19 @@ class MainActivity : AppCompatActivity() {
             override fun onIceConnectionReceivingChange(receiving: Boolean) {}
             override fun onIceGatheringChange(iceGatheringState: PeerConnection.IceGatheringState) {}
             override fun onRemoveStream(mediaStream: MediaStream) {}
-            override fun onDataChannel(dataChannel: DataChannel) {}
-            override fun onRenegotiationNeeded() {}
+            override fun onDataChannel(dataChannel: DataChannel) {
+                log("onDataChannel")
+            }
+            override fun onRenegotiationNeeded() {
+                log("onRenegotiationNeeded")
+            }
+            override fun onAddTrack(receiver: RtpReceiver?, mediaStreams: Array<out MediaStream>?) {
+                log("onAddTrack")
+                (receiver?.track() as? AudioTrack)?.setEnabled(true)
+            }
         })!!
 
-        peerConnection.createDataChannel("results", DataChannel.Init().apply {
+        dataChannel = peerConnection?.createDataChannel("results", DataChannel.Init().apply {
             ordered = true
         })
 
@@ -125,14 +139,14 @@ class MainActivity : AppCompatActivity() {
         val audioSource = factory.createAudioSource(mediaConstraints)
         val localAudioTrack = factory.createAudioTrack("1000", audioSource)
         localAudioTrack.setEnabled(true)
-        peerConnection.addTrack(localAudioTrack, mediaStreamLabels)
+        peerConnection?.addTrack(localAudioTrack, mediaStreamLabels)
 
-        peerConnection.createOffer(object : SdpObserver {
+        peerConnection?.createOffer(object : SdpObserver {
             override fun onCreateSuccess(desc: SessionDescription?) {
-                log(">>>>>>>>>>>>>>>>>>>>>>>>>=====================================")
-                log("onCreateSuccess ${desc?.type} ${desc?.description.orEmpty()}")
-                log(">>>>>>>>>>>>>>>>>>>>>>>>>=====================================")
-                peerConnection.setLocalDescription(object : SdpObserver {
+                // log(">>>>>>>>>>>>>>>>>>>>>>>>>=====================================")
+                // log("onCreateSuccess ${desc?.type} ${desc?.description.orEmpty()}")
+                // log(">>>>>>>>>>>>>>>>>>>>>>>>>=====================================")
+                peerConnection?.setLocalDescription(object : SdpObserver {
                     override fun onCreateSuccess(d: SessionDescription?) {
                     }
 
@@ -160,7 +174,12 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun stop() {
-
+        dataChannel?.close()
+        peerConnection?.transceivers?.forEach {
+            it.sender.track()?.setEnabled(false)
+        }
+        peerConnection?.close()
+        peerConnection?.dispose()
     }
 
     suspend fun sendOffer(offer: String): String? {
