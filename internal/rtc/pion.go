@@ -105,8 +105,10 @@ func (pi *PionRtcService) handleAudioTrack(pc *webrtc.PeerConnection, track *web
 				errs <- err
 				return
 			}
-			audioStream <- packet.Payload
-			<-response
+			if len(packet.Payload) > 0 {
+				audioStream <- packet.Payload
+				<-response
+			}
 		}
 	}()
 	err = nil
@@ -154,8 +156,8 @@ func (pi *PionRtcService) CreatePeerConnection() (PeerConnection, error) {
 	})
 
 	pc.OnTrack(func(track *webrtc.TrackRemote, r *webrtc.RTPReceiver) {
-		if track.Codec().MimeType == webrtc.MimeTypeOpus {
-			log.Printf("Received audio (%s) track, id = %s\n", track.Codec().MimeType, track.ID())
+		if track.Kind() == webrtc.RTPCodecTypeAudio {
+            log.Printf("Received audio track, id = %s, codec = %v\n", track.ID(), track.Codec())
 			err := pi.handleAudioTrack(pc, track, <-dataChan)
 			if err != nil {
 				log.Printf("Error reading track (%s): %v\n", track.ID(), err)
