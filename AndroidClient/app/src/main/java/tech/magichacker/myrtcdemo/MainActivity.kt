@@ -127,6 +127,7 @@ class MainActivity : AppCompatActivity() {
             }
             override fun onAddTrack(receiver: RtpReceiver?, mediaStreams: Array<out MediaStream>?) {
                 log("onAddTrack")
+                // 这里也可以不写，默认就是开启的
                 (receiver?.track() as? AudioTrack)?.setEnabled(true)
             }
         })!!
