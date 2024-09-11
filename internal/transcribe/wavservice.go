@@ -19,7 +19,7 @@ type WavTranscriber struct {
 }
 
 // CreateStream creates a new WAV file and returns a Stream for writing audio data
-func (s *WavTranscriber) CreateStream(peerConnection *webrtc.PeerConnection) (Stream, error) {
+func (s *WavTranscriber) CreateStream(track *webrtc.TrackLocalStaticRTP) (Stream, error) {
 	timestamp := time.Now().Unix()
 	filename := fmt.Sprintf("%d.wav", timestamp)
 	filepath := filepath.Join(".", filename)
@@ -83,6 +83,10 @@ func (ws *WavStream) Close() error {
 // Results returns a channel for receiving transcription results
 func (ws *WavStream) Results() <-chan Result {
 	return ws.results
+}
+
+func (ws *WavStream) NeedDecode() bool {
+	return true
 }
 
 func NewWavService(ctx context.Context) (Service, error) {

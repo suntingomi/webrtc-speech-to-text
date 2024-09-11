@@ -34,8 +34,8 @@ func main() {
 	var tr transcribe.Service
 	ctx := context.Background()
 	// tr, err := transcribe.NewGoogleSpeech(ctx, *speechCred)
-	tr, err := transcribe.NewWavService(ctx)
-	// tr, err := transcribe.NewEchoService(ctx)
+	// tr, err := transcribe.NewWavService(ctx)
+	tr, err := transcribe.NewEchoService(ctx)
 
 	var webrtc rtc.Service
 	webrtc = rtc.NewPionRtcService(*stunServer, tr)

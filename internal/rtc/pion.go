@@ -59,12 +59,13 @@ func (p *PionPeerConnection) Close() error {
 	return p.pc.Close()
 }
 
-func (pi *PionRtcService) handleAudioTrack(pc *webrtc.PeerConnection, track *webrtc.TrackRemote, dc *webrtc.DataChannel) error {
+func (pi *PionRtcService) handleAudioTrack(pc *webrtc.PeerConnection, track *webrtc.TrackRemote, localTrack *webrtc.TrackLocalStaticRTP, dc *webrtc.DataChannel) error {
 	decoder, err := newDecoder()
 	if err != nil {
+		log.Printf("Error create decoder %v\n", err)
 		return err
 	}
-	trStream, err := pi.transcriber.CreateStream(pc)
+	trStream, err := pi.transcriber.CreateStream(localTrack)
 	if err != nil {
 		return err
 	}
@@ -105,8 +106,18 @@ func (pi *PionRtcService) handleAudioTrack(pc *webrtc.PeerConnection, track *web
 				errs <- err
 				return
 			}
-			if len(packet.Payload) > 0 {
-				audioStream <- packet.Payload
+			log.Printf("receive packet %v\n", packet)
+			if trStream.NeedDecode() {
+				if len(packet.Payload) > 0 {
+					audioStream <- packet.Payload
+					<-response
+				}
+			} else {
+				packetBytes, err := packet.Marshal()
+				if err != nil {
+					log.Fatalf("Failed to marshal RTP packet: %v", err)
+				}
+				audioStream <- packetBytes
 				<-response
 			}
 		}
@@ -115,12 +126,18 @@ func (pi *PionRtcService) handleAudioTrack(pc *webrtc.PeerConnection, track *web
 	for {
 		select {
 		case audioChunk := <-audioStream:
-			payload, err := decoder.decode(audioChunk)
-			response <- true
-			if err != nil {
-				return err
+			if trStream.NeedDecode() {
+				payload, err := decoder.decode(audioChunk)
+				if err != nil {
+					fmt.Printf("decode error %v\n", err)
+					return err
+				}
+				response <- true
+				_, err = trStream.Write(payload)
+			} else {
+				response <- true
+				_, err = trStream.Write(audioChunk)
 			}
-			_, err = trStream.Write(payload)
 			if err != nil {
 				return err
 			}
@@ -155,10 +172,32 @@ func (pi *PionRtcService) CreatePeerConnection() (PeerConnection, error) {
 		dataChan <- dc
 	})
 
+	// Create a new audio track
+	localTrack, err := webrtc.NewTrackLocalStaticRTP(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus}, "audio", "pion")
+	if err != nil {
+		return nil, err
+	}
+
+	// Add the track to the peer connection
+	rtpSender, err := pc.AddTrack(localTrack)
+	if err != nil {
+		return nil, err
+	}
+
+	// Handle RTCP packets (for example, to handle feedback from the client)
+	go func() {
+		rtcpBuf := make([]byte, 1500)
+		for {
+			if _, _, rtcpErr := rtpSender.Read(rtcpBuf); rtcpErr != nil {
+				return
+			}
+		}
+	}()
+
 	pc.OnTrack(func(track *webrtc.TrackRemote, r *webrtc.RTPReceiver) {
 		if track.Kind() == webrtc.RTPCodecTypeAudio {
             log.Printf("Received audio track, id = %s, codec = %v\n", track.ID(), track.Codec())
-			err := pi.handleAudioTrack(pc, track, <-dataChan)
+			err := pi.handleAudioTrack(pc, track, localTrack, <-dataChan)
 			if err != nil {
 				log.Printf("Error reading track (%s): %v\n", track.ID(), err)
 			}
