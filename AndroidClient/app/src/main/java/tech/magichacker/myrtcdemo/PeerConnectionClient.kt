@@ -8,6 +8,8 @@ import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.json.JSONObject
+import org.webrtc.AudioTrack
+import org.webrtc.AudioTrackSink
 import org.webrtc.DataChannel
 import org.webrtc.IceCandidate
 import org.webrtc.MediaConstraints
@@ -20,6 +22,7 @@ import org.webrtc.SessionDescription
 import org.webrtc.audio.JavaAudioDeviceModule
 import org.webrtc.audio.JavaAudioDeviceModule.AudioRecordStateCallback
 import org.webrtc.audio.JavaAudioDeviceModule.AudioTrackStateCallback
+import java.nio.ByteBuffer
 import java.util.Collections
 import java.util.concurrent.Executors
 
@@ -34,6 +37,13 @@ class PeerConnectionClient(private val context: Context) {
     private var makingOffer = false
     private var ignoreOffer = false
 
+    private var count = 0
+    private val audioSink = object : AudioTrackSink {
+        override fun onData(p0: ByteBuffer?, p1: Int, p2: Int, p3: Int, p4: Int, p5: Long) {
+            // log("AudioTrackSink onData ${p1} ${p2} ${p3} ${p4} ${p5} ${++count}")
+        }
+    }
+
     companion object {
         private const val DEBUG = true
         private const val TAG = "PeerConnectionClient"
@@ -46,6 +56,14 @@ class PeerConnectionClient(private val context: Context) {
 
         override fun onIceConnectionChange(state: PeerConnection.IceConnectionState?) {
             log("onIceConnectionChange state = $state")
+            if (state == PeerConnection.IceConnectionState.CONNECTED) {
+                peerConnection?.transceivers?.mapNotNull { it.receiver.track() }?.forEach {
+                    log("onConnected ${it::class.java.name}")
+                    (it as? AudioTrack)?.let { track ->
+                        track.addSink(audioSink)
+                    }
+                }
+            }
         }
 
         override fun onIceConnectionReceivingChange(changed: Boolean) {
@@ -159,26 +177,28 @@ class PeerConnectionClient(private val context: Context) {
         PeerConnectionFactory.initialize(initializationOptions)
         peerConnectionFactory = PeerConnectionFactory
             .builder()
-            .setAudioDeviceModule(JavaAudioDeviceModule.builder(context)
-                .setAudioTrackStateCallback(object : AudioTrackStateCallback {
-                    override fun onWebRtcAudioTrackStart() {
-                        log("onWebRtcAudioTrackStart")
-                    }
+            .setAudioDeviceModule(
+                JavaAudioDeviceModule.builder(context)
+                    .setAudioTrackStateCallback(object : AudioTrackStateCallback {
+                        override fun onWebRtcAudioTrackStart() {
+                            log("onWebRtcAudioTrackStart")
+                        }
 
-                    override fun onWebRtcAudioTrackStop() {
-                        log("onWebRtcAudioTrackStop")
-                    }
-                })
-                .setAudioRecordStateCallback(object : AudioRecordStateCallback {
-                    override fun onWebRtcAudioRecordStart() {
-                        log("onWebRtcAudioRecordStart")
-                    }
+                        override fun onWebRtcAudioTrackStop() {
+                            log("onWebRtcAudioTrackStop")
+                        }
+                    })
+                    .setAudioRecordStateCallback(object : AudioRecordStateCallback {
+                        override fun onWebRtcAudioRecordStart() {
+                            log("onWebRtcAudioRecordStart")
+                        }
 
-                    override fun onWebRtcAudioRecordStop() {
-                        log("onWebRtcAudioRecordStop")
-                    }
-                })
-                .createAudioDeviceModule())
+                        override fun onWebRtcAudioRecordStop() {
+                            log("onWebRtcAudioRecordStop")
+                        }
+                    })
+                    .createAudioDeviceModule()
+            )
             .createPeerConnectionFactory()
         val rtcConfig = PeerConnection.RTCConfiguration(emptyList())
         peerConnection = peerConnectionFactory?.createPeerConnection(rtcConfig, peerObserver)
