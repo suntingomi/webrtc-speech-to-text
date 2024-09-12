@@ -17,6 +17,9 @@ import org.webrtc.PeerConnectionFactory
 import org.webrtc.RtpReceiver
 import org.webrtc.SdpObserver
 import org.webrtc.SessionDescription
+import org.webrtc.audio.JavaAudioDeviceModule
+import org.webrtc.audio.JavaAudioDeviceModule.AudioRecordStateCallback
+import org.webrtc.audio.JavaAudioDeviceModule.AudioTrackStateCallback
 import java.util.Collections
 import java.util.concurrent.Executors
 
@@ -156,6 +159,26 @@ class PeerConnectionClient(private val context: Context) {
         PeerConnectionFactory.initialize(initializationOptions)
         peerConnectionFactory = PeerConnectionFactory
             .builder()
+            .setAudioDeviceModule(JavaAudioDeviceModule.builder(context)
+                .setAudioTrackStateCallback(object : AudioTrackStateCallback {
+                    override fun onWebRtcAudioTrackStart() {
+                        log("onWebRtcAudioTrackStart")
+                    }
+
+                    override fun onWebRtcAudioTrackStop() {
+                        log("onWebRtcAudioTrackStop")
+                    }
+                })
+                .setAudioRecordStateCallback(object : AudioRecordStateCallback {
+                    override fun onWebRtcAudioRecordStart() {
+                        log("onWebRtcAudioRecordStart")
+                    }
+
+                    override fun onWebRtcAudioRecordStop() {
+                        log("onWebRtcAudioRecordStop")
+                    }
+                })
+                .createAudioDeviceModule())
             .createPeerConnectionFactory()
         val rtcConfig = PeerConnection.RTCConfiguration(emptyList())
         peerConnection = peerConnectionFactory?.createPeerConnection(rtcConfig, peerObserver)

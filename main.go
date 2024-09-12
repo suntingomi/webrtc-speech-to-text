@@ -232,6 +232,7 @@ func playFromDisk(audioFileName string, pc *webrtc.PeerConnection) {
 				pageData, pageHeader, oggErr := ogg.ParseNextPage()
 				if errors.Is(oggErr, io.EOF) {
 					fmt.Printf("All audio pages parsed and sent")
+					break
 				}
 
 				if oggErr != nil {
