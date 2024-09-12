@@ -63,18 +63,40 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 		peerConnection.Close()
 	}()
 
+	audioTrack, audioTrackErr := webrtc.NewTrackLocalStaticRTP(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus}, "audio", "pion")
+	if audioTrackErr != nil {
+		panic(audioTrackErr)
+	}
+
+	rtpSender, audioTrackErr := peerConnection.AddTrack(audioTrack)
+	if audioTrackErr != nil {
+		panic(audioTrackErr)
+	}
+
+	// Read incoming RTCP packets
+	// Before these packets are returned they are processed by interceptors. For things
+	// like NACK this needs to be called.
+	go func() {
+		rtcpBuf := make([]byte, 1500)
+		for {
+			if _, _, rtcpErr := rtpSender.Read(rtcpBuf); rtcpErr != nil {
+				return
+			}
+		}
+	}()
+
 	peerConnection.OnNegotiationNeeded(func() {
-		log.Printf("OnNegotiationNeeded\n")
-		desc, err := peerConnection.CreateOffer(nil)
-		if err != nil {
-			log.Printf("error create offer %v\n", err)
-		}
-		err = peerConnection.SetLocalDescription(desc)
-		if err != nil {
-			log.Printf("error set local descriptor%v\n", err)
-		}
-		offerJSON, err := json.Marshal(desc)
-		ws.WriteMessage(websocket.TextMessage, offerJSON)
+		// log.Printf("OnNegotiationNeeded\n")
+		// desc, err := peerConnection.CreateOffer(nil)
+		// if err != nil {
+		// 	log.Printf("error create offer %v\n", err)
+		// }
+		// err = peerConnection.SetLocalDescription(desc)
+		// if err != nil {
+		// 	log.Printf("error set local descriptor%v\n", err)
+		// }
+		// offerJSON, err := json.Marshal(desc)
+		// ws.WriteMessage(websocket.TextMessage, offerJSON)
 	})
 
 	peerConnection.OnICEConnectionStateChange(func(connState webrtc.ICEConnectionState) {
@@ -95,7 +117,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 
 	peerConnection.OnTrack(func(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
 		log.Printf("OnTrack %v\n", receiver.Track().Codec())
-		playFromDisk("output.ogg", peerConnection)
+		playFromDisk("output.ogg", audioTrack)
 		for {
 			// rtp, _, err := track.ReadRTP()
 			_, _, err := track.ReadRTP()
@@ -181,7 +203,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func playFromDisk(audioFileName string, pc *webrtc.PeerConnection) {
+func playFromDisk(audioFileName string, audioTrack *webrtc.TrackLocalStaticRTP) {
 	_, err := os.Stat(audioFileName)
 	haveAudioFile := !os.IsNotExist(err)
 	if !haveAudioFile {
@@ -189,28 +211,6 @@ func playFromDisk(audioFileName string, pc *webrtc.PeerConnection) {
 		return
 	}
 	if haveAudioFile {
-		audioTrack, audioTrackErr := webrtc.NewTrackLocalStaticRTP(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus}, "audio", "pion")
-		if audioTrackErr != nil {
-			panic(audioTrackErr)
-		}
-
-		rtpSender, audioTrackErr := pc.AddTrack(audioTrack)
-		if audioTrackErr != nil {
-			panic(audioTrackErr)
-		}
-
-		// Read incoming RTCP packets
-		// Before these packets are returned they are processed by interceptors. For things
-		// like NACK this needs to be called.
-		go func() {
-			rtcpBuf := make([]byte, 1500)
-			for {
-				if _, _, rtcpErr := rtpSender.Read(rtcpBuf); rtcpErr != nil {
-					return
-				}
-			}
-		}()
-
 		go func() {
 			file, oggErr := os.Open(audioFileName)
 			if oggErr != nil {
