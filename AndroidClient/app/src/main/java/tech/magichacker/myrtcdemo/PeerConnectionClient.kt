@@ -23,6 +23,7 @@ import org.webrtc.audio.JavaAudioDeviceModule
 import org.webrtc.audio.JavaAudioDeviceModule.AudioRecordStateCallback
 import org.webrtc.audio.JavaAudioDeviceModule.AudioTrackStateCallback
 import java.nio.ByteBuffer
+import java.nio.charset.Charset
 import java.util.Collections
 import java.util.concurrent.Executors
 
@@ -32,10 +33,16 @@ class PeerConnectionClient(private val context: Context) {
     private var webSocket: WebSocket? = null
     private var peerConnectionFactory: PeerConnectionFactory? = null
     private var peerConnection: PeerConnection? = null
+    private var dataChannel: DataChannel? = null
 
     private val executor = Executors.newSingleThreadExecutor()
     private var makingOffer = false
     private var ignoreOffer = false
+
+    companion object {
+        private const val DEBUG = true
+        private const val TAG = "PeerConnectionClient"
+    }
 
     private var count = 0
     private val audioSink = object : AudioTrackSink {
@@ -44,9 +51,29 @@ class PeerConnectionClient(private val context: Context) {
         }
     }
 
-    companion object {
-        private const val DEBUG = true
-        private const val TAG = "PeerConnectionClient"
+    private val dataObserver = object : DataChannel.Observer {
+        override fun onBufferedAmountChange(p0: Long) {
+            log("DataChannel onBufferedAmountChanged $p0")
+        }
+
+        override fun onStateChange() {
+            log("DataChannel onStateChanged")
+        }
+
+        override fun onMessage(p0: DataChannel.Buffer?) {
+            val msg = retreiveMsg(p0?.data)
+            log("DataChannel onMessage $msg")
+            kotlin.runCatching {
+                processSdpMsg(JSONObject(msg))
+            }
+        }
+
+        private fun retreiveMsg(buffer: ByteBuffer?): String {
+            buffer ?: return ""
+            val bytes = ByteArray(buffer.capacity())
+            buffer.get(bytes)
+            return String(bytes, Charset.forName("UTF-8"))
+        }
     }
 
     private val peerObserver = object : PeerConnection.Observer {
@@ -125,35 +152,7 @@ class PeerConnectionClient(private val context: Context) {
 
             override fun onMessage(webSocket: WebSocket, text: String) {
                 log("Websocket onMessage text = $text")
-                executor.execute {
-                    val json = JSONObject(text)
-                    val type = json.optString("type")
-                    when (type) {
-                        "offer" -> {
-                            makingOffer = false
-                            val sdp = json.optString("sdp")
-                            val desc = SessionDescription(SessionDescription.Type.OFFER, sdp)
-                            setRemoteDescriptor(desc)
-                        }
-                        "answer" -> {
-                            val sdp = json.optString("sdp")
-                            val desc = SessionDescription(SessionDescription.Type.ANSWER, sdp)
-                            setRemoteDescriptor(desc)
-                        }
-                        else -> {
-                            val candidate = json.optString("candidate")
-                            if (!candidate.isNullOrEmpty()) {
-                                peerConnection?.addIceCandidate(
-                                    IceCandidate(
-                                        json.optString("sdpMid").orEmpty(),
-                                        json.optInt("sdpMLineIndex"),
-                                        json.optString("candidate").orEmpty(),
-                                    )
-                                )
-                            }
-                        }
-                    }
-                }
+                processSdpMsg(JSONObject(text))
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
@@ -163,9 +162,42 @@ class PeerConnectionClient(private val context: Context) {
         client.dispatcher.executorService.shutdown()
     }
 
+    private fun processSdpMsg(json: JSONObject) {
+        executor.execute {
+            val type = json.optString("type")
+            when (type) {
+                "offer" -> {
+                    makingOffer = false
+                    val sdp = json.optString("sdp")
+                    val desc = SessionDescription(SessionDescription.Type.OFFER, sdp)
+                    setRemoteDescriptor(desc)
+                }
+                "answer" -> {
+                    val sdp = json.optString("sdp")
+                    val desc = SessionDescription(SessionDescription.Type.ANSWER, sdp)
+                    setRemoteDescriptor(desc)
+                }
+                else -> {
+                    val candidate = json.optString("candidate")
+                    if (!candidate.isNullOrEmpty()) {
+                        peerConnection?.addIceCandidate(
+                            IceCandidate(
+                                json.optString("sdpMid").orEmpty(),
+                                json.optInt("sdpMLineIndex"),
+                                json.optString("candidate").orEmpty(),
+                            )
+                        )
+                    }
+                }
+            }
+        }
+    }
+
     fun stop() {
         webSocket?.close(1000, "")
         webSocket = null
+        dataChannel?.unregisterObserver()
+        dataChannel = null
         peerConnection?.close()
         peerConnection = null
         executor.shutdown()
@@ -202,6 +234,10 @@ class PeerConnectionClient(private val context: Context) {
             .createPeerConnectionFactory()
         val rtcConfig = PeerConnection.RTCConfiguration(emptyList())
         peerConnection = peerConnectionFactory?.createPeerConnection(rtcConfig, peerObserver)
+        dataChannel = peerConnection?.createDataChannel("data01", DataChannel.Init().apply {
+            ordered = true
+        })
+        dataChannel?.registerObserver(dataObserver)
     }
 
     private fun addAudioTrack() {

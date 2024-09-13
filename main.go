@@ -85,19 +85,49 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	peerConnection.OnNegotiationNeeded(func() {
-		// log.Printf("OnNegotiationNeeded\n")
-		// desc, err := peerConnection.CreateOffer(nil)
-		// if err != nil {
-		// 	log.Printf("error create offer %v\n", err)
-		// }
-		// err = peerConnection.SetLocalDescription(desc)
-		// if err != nil {
-		// 	log.Printf("error set local descriptor%v\n", err)
-		// }
-		// offerJSON, err := json.Marshal(desc)
-		// ws.WriteMessage(websocket.TextMessage, offerJSON)
+	var dataChannel *webrtc.DataChannel
+
+	peerConnection.OnDataChannel(func(dc *webrtc.DataChannel) {
+		log.Printf("OnDataChannel %s\n", dc.Label())
+		dataChannel = dc
 	})
+
+	peerConnection.OnNegotiationNeeded(func() {
+		log.Printf("OnNegotiationNeeded\n")
+		if dataChannel != nil {
+			desc, err := peerConnection.CreateOffer(nil)
+			if err != nil {
+				log.Printf("error create offer %v\n", err)
+			}
+			err = peerConnection.SetLocalDescription(desc)
+			if err != nil {
+				log.Printf("error set local descriptor%v\n", err)
+			}
+			offerJSON, err := json.Marshal(desc)
+			dataChannel.Send(offerJSON)
+		}
+	})
+
+	go func() {
+		time.Sleep(2 * time.Second)
+		log.Printf("begin add new Track\n")
+		t, _ := webrtc.NewTrackLocalStaticRTP(webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus}, "audio1", "pion1")
+		s, _ := peerConnection.AddTrack(t)
+		log.Printf("success add new Track\n")
+
+		time.Sleep(2 * time.Second)
+		log.Printf("try to remove track\n")
+		peerConnection.RemoveTrack(s)
+		log.Printf("success to remove track\n")
+
+		time.Sleep(2 * time.Second)
+		log.Printf("try to create a new datachannel\n")
+		ordered := true
+		peerConnection.CreateDataChannel("chan_from_server_01", &webrtc.DataChannelInit{
+			Ordered: &ordered,
+		})
+		log.Printf("success create a new datachannel\n")
+	}()
 
 	peerConnection.OnICEConnectionStateChange(func(connState webrtc.ICEConnectionState) {
 		log.Printf("Connection state: %s \n", connState.String())
@@ -239,9 +269,9 @@ func playFromDisk(audioFileName string, audioTrack *webrtc.TrackLocalStaticRTP) 
 					panic(oggErr)
 				}
 
-				sampleCount := float64(pageHeader.GranulePosition - lastGranule)
+				// sampleCount := float64(pageHeader.GranulePosition - lastGranule)
 				lastGranule = pageHeader.GranulePosition
-				sampleDuration := time.Duration((sampleCount/48000)*1000) * time.Millisecond
+				// sampleDuration := time.Duration((sampleCount/48000)*1000) * time.Millisecond
 
 				packet := &rtp.Packet{
 					Header: rtp.Header{
@@ -258,7 +288,7 @@ func playFromDisk(audioFileName string, audioTrack *webrtc.TrackLocalStaticRTP) 
 				if oggErr = audioTrack.WriteRTP(packet); oggErr != nil {
 					panic(oggErr)
 				}
-				log.Printf("success WriteRTP %v\n", sampleDuration)
+				// log.Printf("success WriteRTP %v\n", sampleDuration)
 			}
 		}()
 	}
