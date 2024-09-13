@@ -90,6 +90,27 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	peerConnection.OnDataChannel(func(dc *webrtc.DataChannel) {
 		log.Printf("OnDataChannel %s\n", dc.Label())
 		dataChannel = dc
+		dataChannel.OnMessage(func(message webrtc.DataChannelMessage) {
+			log.Printf("DataChannel OnMessage %s\n", string(message.Data))
+			var msg map[string]interface{}
+			err = json.Unmarshal(message.Data, &msg)
+			if err != nil {
+				log.Println("Error unmarshaling message:", err)
+				return
+			}
+			switch msg["type"] {
+			case "answer":
+				answer := webrtc.SessionDescription{
+					Type: webrtc.SDPTypeAnswer,
+					SDP:  msg["sdp"].(string),
+				}
+				err = peerConnection.SetRemoteDescription(answer)
+				if err != nil {
+					log.Println("Error setting remote description:", err)
+					return
+				}
+			}
+		})
 	})
 
 	peerConnection.OnNegotiationNeeded(func() {

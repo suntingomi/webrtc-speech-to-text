@@ -38,6 +38,7 @@ class PeerConnectionClient(private val context: Context) {
     private val executor = Executors.newSingleThreadExecutor()
     private var makingOffer = false
     private var ignoreOffer = false
+    private var sendByDataChanel = false
 
     companion object {
         private const val DEBUG = true
@@ -64,7 +65,7 @@ class PeerConnectionClient(private val context: Context) {
             val msg = retreiveMsg(p0?.data)
             log("DataChannel onMessage $msg")
             kotlin.runCatching {
-                processSdpMsg(JSONObject(msg))
+                processSdpMsg(JSONObject(msg), true)
             }
         }
 
@@ -86,9 +87,7 @@ class PeerConnectionClient(private val context: Context) {
             if (state == PeerConnection.IceConnectionState.CONNECTED) {
                 peerConnection?.transceivers?.mapNotNull { it.receiver.track() }?.forEach {
                     log("onConnected ${it::class.java.name}")
-                    (it as? AudioTrack)?.let { track ->
-                        track.addSink(audioSink)
-                    }
+                    (it as? AudioTrack)?.addSink(audioSink)
                 }
             }
         }
@@ -134,6 +133,10 @@ class PeerConnectionClient(private val context: Context) {
         override fun onAddTrack(receiver: RtpReceiver?, mediaStreams: Array<out MediaStream>?) {
             log("onAddTrack")
         }
+
+        override fun onRemoveTrack(receiver: RtpReceiver?) {
+            log("onRemoveTrack")
+        }
     }
 
     fun start() {
@@ -162,8 +165,9 @@ class PeerConnectionClient(private val context: Context) {
         client.dispatcher.executorService.shutdown()
     }
 
-    private fun processSdpMsg(json: JSONObject) {
+    private fun processSdpMsg(json: JSONObject, byDataChannel: Boolean = false) {
         executor.execute {
+            sendByDataChanel = byDataChannel
             val type = json.optString("type")
             when (type) {
                 "offer" -> {
@@ -346,10 +350,21 @@ class PeerConnectionClient(private val context: Context) {
     }
 
     private fun sendAnswer(desc: SessionDescription) {
-        val json = JSONObject()
-        json.put("type", "answer")
-        json.put("sdp", desc.description)
-        webSocket?.send(json.toString())
+        executor.execute {
+            log("sendAnswer useDataChannel = $sendByDataChanel")
+            val json = JSONObject()
+            json.put("type", "answer")
+            json.put("sdp", desc.description)
+            if (sendByDataChanel) {
+                val bytes = json.toString().toByteArray(Charsets.UTF_8)
+                val buffer = ByteBuffer.wrap(bytes)
+                val dataBuffer = DataChannel.Buffer(buffer, false)
+                dataChannel?.send(dataBuffer)
+                sendByDataChanel = false
+            } else {
+                webSocket?.send(json.toString())
+            }
+        }
     }
 
     private fun sendCandidate(candidate: IceCandidate) {
