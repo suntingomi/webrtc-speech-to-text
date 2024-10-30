@@ -1,64 +1,41 @@
-## WebRTC speech to text server
+# Webrtc Demo
 
-### Dependencies
+## 概述
 
-The speech to text server only depends on [Go 1.12](https://golang.org/doc/install).
+分为服务端模块和android客户端模块
+其中AndroidClient为安卓客户端
+其余为基于pion的服务端模块
 
-### Disclaimer
+## peer-connection
 
-**This project is only a proof of concept and SHOULDN'T be deployed on a production 
-environment as it lacks even the most basic security measures.**
+建立连接的示例
 
-### Build the project
+## play-from-server
 
-The project includes a Makefile, to build execute:
+服务端播放本地音频，android客户端播放 (使用WriteSample接口)
 
-```bash
-make
-```
+# play-from-server-rtp
 
-This should generate a `transcribe-server` binary.
+服务端播放本地音频，使用WriteRTP接口
 
-### Running the server
+## webrtc-server-socket
 
-The server receives the following flags through the command line:
+websocket支持offer/answer/candidate完整的信令
+支持从客户端或者服务端任意一端发起协商
+支持在连接建立后添加新的track(此时需要重新协商)
 
-`--google.cred` (Required)
+## socket-remove-track
 
-Path to a Google Cloud credential's file. The project must have Google Speech activated.
+删除音频轨道
 
-`--http.port` (Optional) 
+## multiple-track
 
-Specifies the port where the HTTP server should listen, by default the port 9000 is used.
+同时添加多个音频轨道并播放
 
-`--stun.server` (Optional)
+## negotiate-data-channel
 
-Allows to speficy a different [STUN](https://es.wikipedia.org/wiki/STUN) server, by default a Google STUN server is used.
+服务端重新协商通过DataChannel发起
 
-### Demo page
+## custom-rtp-extension
 
-The demo works on Chrome 75, Firefox 67 and Safari 12.1.1
-
-![Demo screenshot](docs/demo.png)
-
-To run the demo execute the server and navigate to `http://localhost:9000`. 
-
-After pressing the **Start** button a dialog asking for permission to access the microphone should appear. 
-After grating access a WebRTC connection is made to the local server, where audio data is decoded and streamed 
-to Google Speech (streaming recognition).
-
-Say something and press the **Stop** button, the results (if any) should appear on screen.
-
-### Architecture
-
-![Architecture and data flow](docs/architecture.png)
-
-### Coming soon
-
-- Unit tests.
-- Be able to specify the desired language.
-- Support for interim results.
-
-### License
-
-MIT - see [LICENSE](LICENSE) for the full text.
+使用默认的扩展，写入自定义数据
